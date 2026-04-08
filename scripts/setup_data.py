@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -36,6 +37,30 @@ def validate_extracted_files() -> list[str]:
     return missing
 
 
+def extract_dataset(zf: zipfile.ZipFile) -> None:
+    members = [member for member in zf.infolist() if not member.is_dir()]
+
+    # Kaggle archives often contain a single top-level folder. Strip it so the
+    # CSVs land directly under data/raw/scrabble-player-rating/.
+    prefixes = {Path(member.filename).parts[0] for member in members if len(Path(member.filename).parts) > 1}
+    strip_root = len(prefixes) == 1
+
+    if EXTRACT_DIR.exists():
+        shutil.rmtree(EXTRACT_DIR)
+    EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
+
+    for member in members:
+        parts = Path(member.filename).parts
+        relative_parts = parts[1:] if strip_root and len(parts) > 1 else parts
+        if not relative_parts:
+            continue
+
+        destination = EXTRACT_DIR.joinpath(*relative_parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(member) as src, destination.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+
 def main() -> int:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -47,10 +72,8 @@ def main() -> int:
     print(f"Dataset archive found: {ZIP_PATH}")
     print(f"SHA256: {sha256sum(ZIP_PATH)}")
 
-    EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
-
     with zipfile.ZipFile(ZIP_PATH) as zf:
-        zf.extractall(EXTRACT_DIR)
+        extract_dataset(zf)
 
     missing = validate_extracted_files()
     if missing:
