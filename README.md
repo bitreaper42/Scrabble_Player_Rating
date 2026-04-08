@@ -49,20 +49,6 @@ Expected extracted files:
 - `train.csv`
 - `turns.csv`
 
-## Dataset Consistency
-
-All team members should verify they are using the same dataset archive.
-
-SHA256 for `scrabble-player-rating.zip`:
-
-`1e2a033b846b723f44a7ea27ea2ca6877efc0008eb037d86614a267dc4284228`
-
-You can verify it locally with:
-
-```bash
-sha256sum data/raw/scrabble-player-rating.zip
-```
-
 ## Collaboration Rules
 
 - Do not commit raw dataset files to GitHub.
