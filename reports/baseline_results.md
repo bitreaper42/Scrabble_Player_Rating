@@ -1,30 +1,24 @@
-# Baseline Results
+# Baseline Model Report
 
-## Scope
+## Baseline Scope
 
-This baseline uses only:
+The baseline model uses:
 
-- human-vs-bot game rows derived from `train.csv` / `test.csv`
+- player-game rows from `train.csv`
 - game-level metadata from `games.csv`
 
-It does **not** use any turn-level features from `turns.csv`.
+It does not use turn-level features from `turns.csv`.
 
-## Validation Approach Used
+## Validation Protocol
 
-The baseline reuses the grouped-human validation strategy from `src/validation.py`.
-
-Validation setup:
+Baseline evaluation uses the grouped-human validation scheme implemented in `src/validation.py`:
 
 - 5 folds
-- grouped by `human_nickname`
-- all games of the same human stay in the same fold
-- evaluation is on held-out human rows only
+- grouping by `human_nickname`
+- all games of the same human placed in the same fold
+- scoring on held-out human rows only
 
-This matches the competition setup better than random row splits because the test set contains mostly unseen humans and only the three bot nicknames overlap between train and test.
-
-## Features Used
-
-The baseline feature set is intentionally simple and metadata-light.
+## Baseline Features
 
 Numeric features:
 
@@ -39,7 +33,7 @@ Numeric features:
 - `max_overtime_minutes`
 - `game_duration_seconds`
 
-Categorical one-hot features:
+Categorical features:
 
 - `bot_nickname`
 - `time_control_name`
@@ -47,32 +41,14 @@ Categorical one-hot features:
 - `lexicon`
 - `rating_mode`
 
-Notes:
+## Models Evaluated
 
-- `first_is_bot` is derived from `games.csv:first`
-- no turn-level logs are used
-- no nickname-level aggregate history is used
-
-## Models Tried
-
-### 1. Global Mean
-
-Predict the same average human rating for every held-out row.
-
-Average CV metrics:
+### Global Mean
 
 - RMSE: `238.8272`
 - MAE: `208.1407`
 
-### 2. Ridge + One-Hot Metadata
-
-`scikit-learn` pipeline:
-
-- numeric imputation + scaling
-- categorical imputation + one-hot encoding
-- `Ridge(alpha=3.0)`
-
-Average CV metrics:
+### Ridge Regression With One-Hot Encoding
 
 - RMSE: `147.2317`
 - MAE: `112.0614`
@@ -93,53 +69,28 @@ Fold-wise MAE:
 - Fold 3: `117.6819`
 - Fold 4: `119.3582`
 
-### 3. HistGradientBoosting
-
-`scikit-learn` pipeline:
-
-- numeric median imputation
-- categorical ordinal encoding
-- `HistGradientBoostingRegressor`
-
-Average CV metrics:
+### HistGradientBoostingRegressor
 
 - RMSE: `157.0773`
 - MAE: `122.7128`
 
-## Best Baseline Result
+## Selected Baseline Model
 
-Best baseline so far:
+Selected baseline:
 
-- model: `ridge_onehot`
-- average RMSE: `147.2317`
-- average MAE: `112.0614`
+- `ridge_onehot`
 
-This gives the team a clean metadata-only benchmark before any turn-level feature engineering.
+Baseline performance:
+
+- RMSE: `147.2317`
+- MAE: `112.0614`
 
 ## Interpretation
 
-- The grouped-human validation is noticeably harder than random row evaluation would be.
-- Final scores, bot rating, and game metadata already contain useful signal for human rating prediction.
-- Even without turn logs, metadata-only baselines already provide strong signal.
-- There is still fold variation, so later work should test whether turn-level features improve both average score and fold stability.
+The metadata-only baseline already captures substantial signal from final scores, bot context, and game metadata. Under grouped-human validation, ridge regression with one-hot encoded categorical features is the strongest baseline among the evaluated metadata-only models.
 
 ## Implementation
 
-Code file:
+The baseline pipeline is implemented in:
 
 - `src/baseline_model.py`
-
-The script currently:
-
-- builds human-only training examples
-- merges in game metadata
-- evaluates baseline models with grouped-human folds
-- can train a full sklearn baseline and generate sample test predictions
-
-## Environment Note
-
-The baseline now uses a local virtual environment at `.venv/` with standard libraries including:
-
-- `numpy`
-- `pandas`
-- `scikit-learn`

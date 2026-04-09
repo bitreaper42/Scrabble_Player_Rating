@@ -1,53 +1,39 @@
-# Model Strategy
+# Final Model Report
 
-## Scope
+## Modeling Objective
 
-This document defines the practical final-model direction for the project and a clean integration path for future feature sets, especially the turn-level features from Member 3.
+The objective is to predict the rating of the human player in each test-game row using game metadata and turn-level gameplay information.
 
-## What From The Reference Notebook Is Useful
+## Reference Notebook Decisions
 
-The reference notebook is useful for these ideas:
+The reference notebook was useful for identifying broad modeling directions, but the final project pipeline was reduced to the parts that remained effective under leakage-safe validation:
 
-- use grouped validation based on player identity rather than random row splits
-- prioritize tree-based gradient boosting for structured tabular features
-- tune only a small set of strong candidates instead of tuning many weak models
-- compare feature blocks incrementally rather than throwing everything in at once
+- grouped validation by player identity
+- comparison of compact, high-signal feature sets
+- focus on strong tabular regression models
 
-These parts should **not** be copied blindly:
+The final pipeline avoids excessive feature inflation and keeps the modeling stack reproducible.
 
-- very broad feature engineering without checking whether each block helps under leakage-safe validation
-- large notebook-style experimentation that is hard to reproduce and integrate
-- early dependence on many extra libraries when the current project already has a working sklearn-based baseline
-- any validation setup that weakens the grouped-human split logic already established in `src/validation.py`
+## Final Feature Set
 
-## Current Baseline Context
+The final model uses a combined feature table built from:
 
-Current validated metadata-only baseline:
+- metadata from `train.csv`, `test.csv`, and `games.csv`
+- turn-level aggregate features derived from `turns.csv`
 
-- `ridge_onehot`
-- average RMSE around `147.23`
-- grouped validation by human nickname
+The turn-based aggregates include:
 
-This is good enough to serve as the control model for all later comparisons.
+- turn counts and non-play rates
+- scoring profile features
+- score progression features
+- rack and move-shape features
+- bingo-like move indicators
 
-Current combined-feature Member 4 scaffold comparison:
+## Candidate Models Evaluated
 
-- the final-model scaffold now uses metadata from `src/baseline_model.py`
-- it also uses turn-level aggregates from `src/turn_features.py`
-- the current best validated submission model is now a weighted blend rather than a single model
+The following regression models were evaluated on the combined feature set:
 
-## Current Implemented Model Performance
-
-This is a regression task, so the relevant validation metrics are:
-
-- RMSE
-- MAE
-
-There is no meaningful classification-style accuracy metric here.
-
-Current grouped-human validation results on the **metadata + turn-feature** set:
-
-| Model | Avg RMSE | Avg MAE | Current Rank |
+| Model | Avg RMSE | Avg MAE | Rank |
 |---|---:|---:|---:|
 | `blend_ridge_hist` | `141.9355` | `109.6770` | 1 |
 | `ridge_onehot` | `145.1150` | `111.4992` | 2 |
@@ -55,180 +41,108 @@ Current grouped-human validation results on the **metadata + turn-feature** set:
 | `hist_gbm` | `153.1473` | `119.6493` | 4 |
 | `lightgbm` | `153.7146` | `119.3483` | 5 |
 
-Current selected final model:
+This is a regression task, so RMSE and MAE are the relevant evaluation metrics.
+
+## Selected Final Model
+
+Selected model:
 
 - `blend_ridge_hist`
 
-Why it is selected currently:
+Reason for selection:
 
-- it has the best average RMSE on the combined feature set
-- it also has the best average MAE among the final combined-feature candidates
-- blending a strong linear model with a tuned nonlinear model works better than either model alone
+- best average RMSE across grouped-human folds
+- best average MAE across the evaluated combined-feature candidates
+- stronger validation performance than any single model tested on the same feature set
 
-## Candidate Model Families Worth Trying Seriously
+## Final Model Structure
 
-### 1. Histogram Gradient Boosting
+The selected model is a weighted blend of two separately trained regressors:
 
-Why it is worth trying:
+- a tuned ridge regression pipeline with one-hot encoded categorical features
+- a tuned histogram gradient boosting regressor
 
-- strong tabular baseline available directly in sklearn
-- handles nonlinear interactions better than ridge
-- easy to integrate with current environment
-- good candidate once turn-level aggregates are merged in
+This blend combines:
 
-Role in project:
+- the stability of the linear model
+- the nonlinear pattern capture of the boosted-tree model
 
-- immediate next serious candidate
-- likely best non-external-library model in the current environment
+### Architecture Details
 
-### 2. Regularized Linear Model
+`blend_ridge_hist` is not a single native library model. It is an ensemble built from two full pipelines that are both trained on the same combined feature table.
 
-Why it stays in the stack:
+#### Component 1: Ridge pipeline
 
-- cheap and stable benchmark
-- useful sanity check against feature leakage or overfitting
-- often surprisingly competitive on engineered aggregates
+Input handling:
 
-Role in project:
+- numeric features are imputed and scaled
+- categorical features are imputed and one-hot encoded
 
-- baseline control model
-- fallback final model if more complex models become unstable
+Estimator:
 
-### 3. LightGBM
+- `Ridge(alpha=10.0)`
 
-Why it is worth trying:
+Role in the ensemble:
 
-- usually among the strongest choices for tabular competition-style regression
-- often outperforms linear models once rich aggregate features exist
-- strong candidate for the final submission once turn-level features are merged
+- captures strong linear relationships between rating and engineered features
+- works especially well with sparse one-hot encoded categorical variables
+- provides stable predictions and acts as the low-variance component of the final ensemble
 
-Current status:
+#### Component 2: Histogram Gradient Boosting pipeline
 
-- installed in the current environment
-- implemented in `src/model_candidates.py`
-- ready for metadata-only benchmarking now
+Input handling:
 
-### 4. XGBoost
+- numeric features are median-imputed
+- categorical features are ordinal-encoded
 
-Why it is worth trying:
+Estimator:
 
-- strong competition-style tree boosting model
-- useful second nonlinear benchmark against LightGBM
-- can react differently from LightGBM on mixed feature sets
+- `HistGradientBoostingRegressor`
+- `learning_rate=0.05`
+- `max_depth=4`
+- `max_iter=900`
+- `min_samples_leaf=15`
+- `l2_regularization=0.5`
 
-Current status:
+Role in the ensemble:
 
-- installed in the current environment
-- implemented in `src/model_candidates.py`
-- ready for metadata-only benchmarking now
+- captures nonlinear effects and feature interactions
+- models relationships that the ridge component cannot represent well
+- acts as the higher-capacity nonlinear component of the final ensemble
 
-### 5. CatBoost
+#### Blend rule
 
-Why it is still on the shortlist:
+Let:
 
-- often strong when categorical variables matter
-- can simplify some categorical handling
+- `y_ridge` = prediction from the ridge pipeline
+- `y_hist` = prediction from the histogram gradient boosting pipeline
 
-Why it is lower priority:
+The final prediction is:
 
-- not currently installed
-- current feature space is still relatively simple
-- should be tested only if the currently implemented candidates plateau
+- `0.65 * y_ridge + 0.35 * y_hist`
 
-## Recommended Final Candidate Order
+This weighted average is implemented through a custom blend regressor in `src/model_candidates.py`.
 
-Practical order of effort:
+### Why This Blend Works
 
-1. `blend_ridge_hist`
-2. `ridge_onehot`
-3. `xgboost`
-4. `hist_gbm`
-5. `lightgbm`
-5. `CatBoost` only if time remains or the implemented candidates plateau
+The two component models make different types of errors:
 
-## Realistic Tuning Plan
+- ridge is strong on broad linear trends and categorical structure
+- histogram gradient boosting is stronger on nonlinear interactions within the metadata and turn-level aggregates
 
-Do **not** run broad hyperparameter sweeps immediately.
+Blending them reduces dependence on one model family and improves overall validation performance. In this project, the weighted blend performs better than either component alone on grouped-human cross-validation.
 
-Use this sequence:
+## Final Result
 
-### Phase 1: combined-feature calibration
+Final validation performance:
 
-- keep the current grouped-human folds
-- compare `ridge_onehot`, `hist_gbm`, `LightGBM`, `XGBoost`, and simple blends on metadata + turn features
-- confirm that the selected blended model stays ahead on average RMSE after reruns
-- keep an eye on fold stability, not just the mean
+- RMSE: `141.9355`
+- MAE: `109.6770`
 
-### Phase 2: limited tuning of the best nonlinear model
+This is the best project-wide result obtained under the grouped-human validation protocol.
 
-For `LightGBM`, `XGBoost`, `hist_gbm`, or the blend components, tune only:
+## Implementation
 
-- learning rate
-- tree depth or leaf complexity
-- number of boosting iterations
-- minimum samples per leaf / child weight
-- regularization strength
-
-Keep search small and evidence-driven:
-
-- 10 to 25 parameter combinations is enough at first
-- require improvement in average RMSE and acceptable fold stability
-
-### Phase 3: optional ensemble
-
-Only consider an ensemble if:
-
-- the top 2 models have materially different error patterns
-- both are validated under the same grouped-human folds
-- the blended score beats the best single model consistently
-
-Simple averaging is enough. Do not build stacking unless there is clear evidence it helps.
-
-## Metrics To Track Consistently
-
-For every candidate model and feature set, record:
-
-- average RMSE across folds
-- average MAE across folds
-- fold-wise RMSE spread
-- fold-wise MAE spread
-- notes on training speed and stability
-
-The project should optimize for validation reliability, not just the single best fold.
-
-## Recommendation For Likely Final Model Stack
-
-Most likely final stack:
-
-- strong metadata + turn-feature table
-- `blend_ridge_hist` as the current submission-grade final model
-- `ridge_onehot` as the control baseline
-- `xgboost` and `hist_gbm` as the main single-model alternatives
-
-Most likely final submission path:
-
-1. keep grouped-human validation fixed
-2. merge Member 3 feature table into the current train/test frames
-3. keep the grouped-human validation fixed
-4. compare the tuned blend against single-model alternatives
-5. only replace the blend if a simpler model clearly beats it under the same folds
-
-## Training Scaffold
-
-The implementation scaffold for this strategy is in:
+The final-model training scaffold is implemented in:
 
 - `src/model_candidates.py`
-
-It is designed to:
-
-- reuse the Member 1 grouped validation
-- start from the current metadata train/test frames
-- merge turn-level aggregates from `src/turn_features.py`
-- compare multiple candidate models under the same fold structure
-- fit a recommended final model and produce test predictions
-
-## Dependency On Member 3
-
-This work is **not blocked** by Member 3.
-
-Member 3 output is now being used through `src/turn_features.py`, so the final-model scaffold is no longer metadata-only. The current selected final model is already a validated blended model on the richer feature set.
