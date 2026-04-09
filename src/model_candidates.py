@@ -36,6 +36,26 @@ except Exception:
     XGBRegressor = None
 
 
+class WeightedBlendRegressor:
+    def __init__(self, estimators: list[tuple[str, object]], weights: list[float]) -> None:
+        self.estimators = estimators
+        self.weights = weights
+
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "WeightedBlendRegressor":
+        self.fitted_estimators_: list[tuple[str, object]] = []
+        for name, estimator in self.estimators:
+            fitted = estimator.fit(X, y)
+            self.fitted_estimators_.append((name, fitted))
+        return self
+
+    def predict(self, X: pd.DataFrame):
+        blended = None
+        for weight, (_, estimator) in zip(self.weights, self.fitted_estimators_):
+            preds = estimator.predict(X)
+            blended = weight * preds if blended is None else blended + weight * preds
+        return blended
+
+
 def merge_optional_features(
     base_frame: pd.DataFrame,
     extra_frame: pd.DataFrame | None = None,
@@ -169,15 +189,15 @@ def build_hist_gbm_pipeline(
 
 def get_candidate_builders() -> dict[str, Callable[[list[str], list[str]], Pipeline]]:
     builders: dict[str, Callable[[list[str], list[str]], Pipeline]] = {
-        "ridge_onehot": lambda num, cat: build_linear_pipeline(num, cat, alpha=3.0),
+        "ridge_onehot": lambda num, cat: build_linear_pipeline(num, cat, alpha=10.0),
         "hist_gbm": lambda num, cat: build_hist_gbm_pipeline(
             num,
             cat,
             learning_rate=0.05,
-            max_depth=6,
-            max_iter=400,
-            min_samples_leaf=30,
-            l2_regularization=0.0,
+            max_depth=4,
+            max_iter=900,
+            min_samples_leaf=15,
+            l2_regularization=0.5,
         ),
     }
 
@@ -215,15 +235,15 @@ def get_candidate_builders() -> dict[str, Callable[[list[str], list[str]], Pipel
                 (
                     "model",
                     LGBMRegressor(
-                        n_estimators=400,
-                        learning_rate=0.04,
+                        n_estimators=700,
+                        learning_rate=0.03,
                         num_leaves=31,
                         max_depth=-1,
-                        min_child_samples=25,
-                        subsample=0.9,
-                        colsample_bytree=0.9,
+                        min_child_samples=20,
+                        subsample=0.85,
+                        colsample_bytree=0.85,
                         reg_alpha=0.0,
-                        reg_lambda=0.1,
+                        reg_lambda=0.5,
                         random_state=42,
                         verbose=-1,
                     ),
@@ -265,14 +285,14 @@ def get_candidate_builders() -> dict[str, Callable[[list[str], list[str]], Pipel
                 (
                     "model",
                     XGBRegressor(
-                        n_estimators=400,
-                        learning_rate=0.04,
-                        max_depth=6,
+                        n_estimators=600,
+                        learning_rate=0.03,
+                        max_depth=5,
                         min_child_weight=4,
-                        subsample=0.9,
-                        colsample_bytree=0.9,
+                        subsample=0.85,
+                        colsample_bytree=0.85,
                         reg_alpha=0.0,
-                        reg_lambda=0.1,
+                        reg_lambda=1.0,
                         objective="reg:squarederror",
                         random_state=42,
                         n_jobs=4,
@@ -281,6 +301,25 @@ def get_candidate_builders() -> dict[str, Callable[[list[str], list[str]], Pipel
                 ),
             ]
         )
+
+    builders["blend_ridge_hist"] = lambda num, cat: WeightedBlendRegressor(
+        estimators=[
+            ("ridge", build_linear_pipeline(num, cat, alpha=10.0)),
+            (
+                "hist_gbm",
+                build_hist_gbm_pipeline(
+                    num,
+                    cat,
+                    learning_rate=0.05,
+                    max_depth=4,
+                    max_iter=900,
+                    min_samples_leaf=15,
+                    l2_regularization=0.5,
+                ),
+            ),
+        ],
+        weights=[0.65, 0.35],
+    )
 
     return builders
 

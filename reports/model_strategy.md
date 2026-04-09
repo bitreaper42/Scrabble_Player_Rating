@@ -34,7 +34,7 @@ Current combined-feature Member 4 scaffold comparison:
 
 - the final-model scaffold now uses metadata from `src/baseline_model.py`
 - it also uses turn-level aggregates from `src/turn_features.py`
-- this is the first real final-model comparison on the richer feature set
+- the current best validated submission model is now a weighted blend rather than a single model
 
 ## Current Implemented Model Performance
 
@@ -49,20 +49,21 @@ Current grouped-human validation results on the **metadata + turn-feature** set:
 
 | Model | Avg RMSE | Avg MAE | Current Rank |
 |---|---:|---:|---:|
-| `xgboost` | `150.3441` | `118.8258` | 1 |
-| `ridge_onehot` | `150.7944` | `118.1805` | 2 |
-| `hist_gbm` | `155.2655` | `122.1826` | 3 |
-| `lightgbm` | `157.7103` | `124.0040` | 4 |
+| `blend_ridge_hist` | `141.9355` | `109.6770` | 1 |
+| `ridge_onehot` | `145.1150` | `111.4992` | 2 |
+| `xgboost` | `151.2549` | `120.6188` | 3 |
+| `hist_gbm` | `153.1473` | `119.6493` | 4 |
+| `lightgbm` | `153.7146` | `119.3483` | 5 |
 
 Current selected final model:
 
-- `xgboost`
+- `blend_ridge_hist`
 
 Why it is selected currently:
 
 - it has the best average RMSE on the combined feature set
-- once turn-level features are included, the nonlinear boosted model finally edges out ridge
-- `ridge_onehot` still has slightly better average MAE, so it remains the strongest control model and a good candidate for simple blending if needed
+- it also has the best average MAE among the final combined-feature candidates
+- blending a strong linear model with a tuned nonlinear model works better than either model alone
 
 ## Candidate Model Families Worth Trying Seriously
 
@@ -138,10 +139,11 @@ Why it is lower priority:
 
 Practical order of effort:
 
-1. `XGBoost`
+1. `blend_ridge_hist`
 2. `ridge_onehot`
-3. `hist_gbm`
-4. `LightGBM`
+3. `xgboost`
+4. `hist_gbm`
+5. `lightgbm`
 5. `CatBoost` only if time remains or the implemented candidates plateau
 
 ## Realistic Tuning Plan
@@ -153,13 +155,13 @@ Use this sequence:
 ### Phase 1: combined-feature calibration
 
 - keep the current grouped-human folds
-- compare `ridge_onehot`, `hist_gbm`, `LightGBM`, and `XGBoost` on metadata + turn features
-- confirm that the selected model stays ahead on average RMSE after reruns
+- compare `ridge_onehot`, `hist_gbm`, `LightGBM`, `XGBoost`, and simple blends on metadata + turn features
+- confirm that the selected blended model stays ahead on average RMSE after reruns
 - keep an eye on fold stability, not just the mean
 
 ### Phase 2: limited tuning of the best nonlinear model
 
-For `LightGBM`, `XGBoost`, or `hist_gbm`, tune only:
+For `LightGBM`, `XGBoost`, `hist_gbm`, or the blend components, tune only:
 
 - learning rate
 - tree depth or leaf complexity
@@ -199,17 +201,17 @@ The project should optimize for validation reliability, not just the single best
 Most likely final stack:
 
 - strong metadata + turn-feature table
-- `xgboost` as the current main nonlinear final model
-- `ridge_onehot` as the control baseline and possible blend partner
-- `hist_gbm` as the sklearn fallback nonlinear benchmark
+- `blend_ridge_hist` as the current submission-grade final model
+- `ridge_onehot` as the control baseline
+- `xgboost` and `hist_gbm` as the main single-model alternatives
 
 Most likely final submission path:
 
 1. keep grouped-human validation fixed
 2. merge Member 3 feature table into the current train/test frames
-3. tune `xgboost` first
-4. compare tuned `xgboost` against untuned or lightly tuned ridge and hist_gbm
-5. optionally average `xgboost` with ridge if validation supports it
+3. keep the grouped-human validation fixed
+4. compare the tuned blend against single-model alternatives
+5. only replace the blend if a simpler model clearly beats it under the same folds
 
 ## Training Scaffold
 
@@ -229,4 +231,4 @@ It is designed to:
 
 This work is **not blocked** by Member 3.
 
-Member 3 output is now being used through `src/turn_features.py`, so the final-model scaffold is no longer metadata-only. Further tuning is still useful, but the current final-model comparison is now meaningful and directly based on the richer feature set.
+Member 3 output is now being used through `src/turn_features.py`, so the final-model scaffold is no longer metadata-only. The current selected final model is already a validated blended model on the richer feature set.
