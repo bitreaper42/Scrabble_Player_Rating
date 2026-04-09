@@ -4,6 +4,7 @@ data/processed/
 *.csv
 # reference ntbk
 full-walkthrough-eda-fe-model-tuning.ipynb
+scripts/generate_final_notebook.py
 
 # Python
 __pycache__/
