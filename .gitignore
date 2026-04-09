@@ -2,6 +2,8 @@ data/raw/
 data/processed/
 *.zip
 *.csv
+# reference ntbk
+full-walkthrough-eda-fe-model-tuning.ipynb
 
 # Python
 __pycache__/
