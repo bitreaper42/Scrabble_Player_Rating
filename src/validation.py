@@ -4,7 +4,7 @@ import csv
 import random
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, List, Sequence
 
 
 BOT_NAMES = frozenset({"BetterBot", "HastyBot", "STEEBot"})
@@ -95,12 +95,6 @@ def make_grouped_human_folds(
     n_splits: int = 5,
     seed: int = 42,
 ) -> Dict[str, int]:
-    """
-    Assign each human nickname to exactly one fold.
-
-    This mirrors the test setting more closely than random row splits:
-    almost all human nicknames in test are unseen, while the three bots are seen.
-    """
 
     if n_splits < 2:
         raise ValueError("n_splits must be at least 2")

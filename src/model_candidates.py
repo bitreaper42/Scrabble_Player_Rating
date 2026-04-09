@@ -18,8 +18,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
 from src.baseline_model import (
-    CATEGORICAL_FEATURES,
-    NUMERIC_FEATURES,
+    # CATEGORICAL_FEATURES,
+    # NUMERIC_FEATURES,
     build_folded_train_frame,
     load_test_frame,
 )
@@ -41,12 +41,6 @@ def merge_optional_features(
     extra_frame: pd.DataFrame | None = None,
     key_columns: list[str] | None = None,
 ) -> pd.DataFrame:
-    """
-    Merge future engineered features without hard-coding member-3 outputs.
-
-    Expected join keys are usually ['game_id', 'human_nickname'] for human-level
-    train/test frames, but this is configurable.
-    """
 
     if extra_frame is None:
         return base_frame.copy()
