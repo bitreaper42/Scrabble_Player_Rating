@@ -81,7 +81,7 @@ Expected extracted files:
 - `train.csv`
 - `turns.csv`
 
-## Run Instructions
+## Run Instructions (in the project base folder)
 
 ### 1. Clone the repository
 
